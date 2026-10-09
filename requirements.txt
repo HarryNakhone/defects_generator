@@ -1,0 +1,7 @@
+numpy
+Pillow
+# Only needed for --mode sd
+torch
+diffusers>=0.27
+transformers
+accelerate
