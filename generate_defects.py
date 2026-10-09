@@ -111,7 +111,12 @@ def load_sd(model, device):
 
     dtype = torch.float16 if device == "cuda" else torch.float32
     pipe = StableDiffusionInpaintPipeline.from_pretrained(model, torch_dtype=dtype, safety_checker=None)
-    pipe = pipe.to(device)
+    pipe.enable_attention_slicing()
+    if device == "cuda" and torch.cuda.get_device_properties(0).total_memory < 6 * 1024**3:
+        # Small GPUs (e.g. 4 GB laptop cards): keep only the active sub-model on the GPU.
+        pipe.enable_model_cpu_offload()
+    else:
+        pipe = pipe.to(device)
     pipe.set_progress_bar_config(disable=True)
     return pipe
 
@@ -148,7 +153,7 @@ def sd_refine(pipe, seeded, alpha, defect, args, seed):
         num_inference_steps=args.steps,
         height=SD_RES,
         width=SD_RES,
-        generator=torch.Generator(device=pipe.device).manual_seed(seed),
+        generator=torch.Generator("cpu").manual_seed(seed),
     ).images[0]
 
     gen = np.asarray(out.convert("L").resize((x1 - x0, y1 - y0), Image.BICUBIC), np.float32)
