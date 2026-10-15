@@ -21,6 +21,7 @@ import json
 import math
 import os
 import random
+import time
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
@@ -239,16 +240,24 @@ def main():
             import torch
             device = "cuda" if torch.cuda.is_available() else (
                 "mps" if torch.backends.mps.is_available() else "cpu")
+        print(f"Loading {args.model} on {device} (first run downloads ~2 GB, this can take a few minutes)...",
+              flush=True)
         pipe = load_sd(args.model, device)
+        print("Model loaded, generating images.", flush=True)
 
     labels_path = os.path.join(args.out, "labels.jsonl")
+    t0 = time.time()
     with open(labels_path, "a") as labels:
         for idx in range(args.start, args.start + args.count):
             rec = generate_one(base, idx, args, pipe)
             labels.write(json.dumps(rec) + "\n")
             labels.flush()
-            if (idx - args.start + 1) % 50 == 0 or idx == args.start + args.count - 1:
-                print(f"{idx - args.start + 1}/{args.count} done")
+            done = idx - args.start + 1
+            if pipe is not None or done % 50 == 0 or done == args.count:
+                elapsed = time.time() - t0
+                eta = elapsed / done * (args.count - done)
+                print(f"{done}/{args.count} done ({elapsed / done:.1f}s/image, ~{eta / 60:.0f} min left)",
+                      flush=True)
 
 
 if __name__ == "__main__":
