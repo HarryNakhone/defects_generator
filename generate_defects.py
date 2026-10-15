@@ -235,6 +235,7 @@ def main():
 
     pipe = None
     if args.mode == "sd":
+        print("Starting up (importing torch can take ~30 s on Windows)...", flush=True)
         device = args.device
         if device is None:
             import torch
