@@ -1,7 +1,7 @@
 # Wafer defect generator
 
-Generates many defective grayscale wafer images (e.g. 1000) from **one** defect-free
-close-up image. Each image gets 1..N random blob-shaped defects, and comes with a mask and a bounding-box label.
+Generates many defective wafer images (e.g. 1000) from **one** defect-free
+close-up image. Each image gets 1..N random grayscale blob-shaped defects, and comes with a mask and a bounding-box label.
 
 ## How it works
 
@@ -29,7 +29,7 @@ python generate_defects.py --input good_wafer.png --out output --count 1000 --mo
 Output:
 
 ```
-output/images/defect_00000.png   # defective image (grayscale)
+output/images/defect_00000.png   # defective image (original colours, grayscale blobs)
 output/masks/defect_00000.png    # binary defect mask (segmentation label)
 output/labels.jsonl              # per image: bbox, center, radius, polarity, contrast of each defect
 ```

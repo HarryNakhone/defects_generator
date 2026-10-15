@@ -165,15 +165,23 @@ def sd_refine(pipe, seeded, alpha, defect, args, seed):
     blend = np.asarray(m, np.float32) / 255.0
     result = seeded.copy()
     result[y0:y1, x0:x1] = seeded[y0:y1, x0:x1] * (1 - blend) + gen * blend
-    return result
+    changed = np.zeros_like(seeded)
+    changed[y0:y1, x0:x1] = blend
+    return result, changed
 
 
 # ---------------------------------------------------------------------------
 # Main loop
 # ---------------------------------------------------------------------------
 
-def generate_one(base, idx, args, pipe):
+def gray_of(rgb):
+    """Same luminance weights as PIL's convert("L")."""
+    return rgb @ np.array([0.299, 0.587, 0.114], np.float32)
+
+
+def generate_one(base_rgb, idx, args, pipe):
     rng = random.Random(args.seed * 1_000_003 + idx)
+    base = gray_of(base_rgb)
     h, w = base.shape
     short = min(w, h)
     min_r, max_r = args.min_radius * short, args.max_radius * short
@@ -182,20 +190,26 @@ def generate_one(base, idx, args, pipe):
     img = base.copy()
     union = np.zeros((h, w), bool)
     alphas = []
+    changed = np.zeros((h, w), np.float32)  # how much each pixel was replaced by defect
     for d in defects:
         alpha, hard = make_blob_alpha(rng, (w, h), d["cx"], d["cy"], d["radius"])
         img = paint_blob(img, alpha, d, rng)
         alphas.append(alpha)
+        changed = np.maximum(changed, alpha)
         union |= hard
         ys, xs = np.nonzero(hard)
         d["bbox"] = [int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())] if len(xs) else None
 
     if pipe is not None:
         for j, (d, alpha) in enumerate(zip(defects, alphas)):
-            img = sd_refine(pipe, img, alpha, d, args, seed=rng.randrange(2**31) + j)
+            img, sd_changed = sd_refine(pipe, img, alpha, d, args, seed=rng.randrange(2**31) + j)
+            changed = np.maximum(changed, sd_changed)
 
     name = f"defect_{idx:05d}.png"
-    Image.fromarray(np.clip(img, 0, 255).astype(np.uint8)).save(os.path.join(args.out, "images", name))
+    # Only the defect area is grayscale; everywhere else keeps the original pixels (and colour).
+    a = changed[..., None]
+    out = base_rgb * (1 - a) + img[..., None] * a
+    Image.fromarray(np.clip(out, 0, 255).astype(np.uint8)).save(os.path.join(args.out, "images", name))
     Image.fromarray(union.astype(np.uint8) * 255).save(os.path.join(args.out, "masks", name))
     for d in defects:
         d["cx"], d["cy"], d["radius"] = round(d["cx"], 1), round(d["cy"], 1), round(d["radius"], 1)
@@ -231,7 +245,7 @@ def main():
     args = parse_args()
     os.makedirs(os.path.join(args.out, "images"), exist_ok=True)
     os.makedirs(os.path.join(args.out, "masks"), exist_ok=True)
-    base = np.asarray(Image.open(args.input).convert("L"), np.float32)
+    base = np.asarray(Image.open(args.input).convert("RGB"), np.float32)
 
     pipe = None
     if args.mode == "sd":
